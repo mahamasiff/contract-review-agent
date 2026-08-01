@@ -1,0 +1,14 @@
+# secrets
+.env
+
+# python env
+.venv/
+__pycache__/
+*.pyc
+
+# generated / regenerable data 
+chroma_store/
+data/*.json
+
+.vscode/
+.DS_Store
