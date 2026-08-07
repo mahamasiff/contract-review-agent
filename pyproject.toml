@@ -4,5 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.5.9",
+    "mcp>=2.0.0",
     "requests>=2.34.2",
 ]

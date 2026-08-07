@@ -20,20 +20,20 @@ import json
 import zipfile
 import io
 import os
+import sys
 import requests
 
 CUAD_ZIP_URL = "https://github.com/TheAtticusProject/cuad/raw/main/data.zip"
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))  # data/
+PROJECT_ROOT = os.path.dirname(OUTPUT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
-CLAUSE_TYPES = [
-    "Renewal Term",
-    "Termination For Convenience",
-    "Cap On Liability",
-    "Uncapped Liability",
-    "Minimum Commitment",
-    "Audit Rights",
-    "Governing Law",
-]
+from backend.clause_types import CLAUSE_TYPES as _CANONICAL_CLAUSE_TYPES
+
+# CUAD's category names are display names (e.g. "Renewal Term"), matched
+# verbatim against the dataset's question text below -- derived from
+# backend/clause_types.py rather than a separate hardcoded copy.
+CLAUSE_TYPES = [c["display_name"] for c in _CANONICAL_CLAUSE_TYPES]
 
 
 def download_cuad_json():

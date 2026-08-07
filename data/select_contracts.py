@@ -24,18 +24,11 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if os.path.basename(PROJECT_ROOT) == "data":
     PROJECT_ROOT = os.path.dirname(PROJECT_ROOT)
+sys.path.insert(0, PROJECT_ROOT)
+
+from backend.clause_types import CLAUSE_SLUGS
 
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-
-CLAUSE_SLUGS = [
-    "renewal_term",
-    "termination_for_convenience",
-    "cap_on_liability",
-    "uncapped_liability",
-    "minimum_commitment",
-    "audit_rights",
-    "governing_law",
-]
 
 CORE_SET_SIZE = 11   # high-coverage contracts
 EDGE_CASE_SIZE = 3    # deliberately-missing-clauses contracts

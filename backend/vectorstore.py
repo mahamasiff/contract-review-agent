@@ -1,25 +1,38 @@
-"""
-Shared retrieval module.
-
-Two consumers, same logic:
-  - eval/retrieval_eval.py     -- chunk a contract, check if the right
-                                       chunk gets retrieved for a clause type
-  - backend/mcp_server/tools.py    -- (later) embed playbook rules /
-                                       precedent, retrieve the relevant one
-
-ChromaDB uses its built-in local embedding model automatically if you don't
-pass a custom embedding_function -- no API key required.
-"""
-
+import os
 import chromadb
 
 
 # ---------- Client ----------
 
+_persistent_clients = {}  # persist_dir -> chromadb.PersistentClient, cached
+
+
 def get_persistent_client(persist_dir="chroma_store"):
     """Writes to disk, survives across runs. Use this for playbook/
-    precedent collections that should stick around between sessions."""
-    return chromadb.PersistentClient(path=persist_dir)
+    precedent collections that should stick around between sessions.
+
+    Cached per persist_dir: constructing two independent PersistentClient
+    instances pointing at the same directory within one process is not
+    safe with chromadb's segment engine -- a second instance's index
+    reader can fail to see data a first instance just wrote (raises
+    "Nothing found on disk" on query), since the write isn't visible
+    outside the client that made it until the process restarts. Ingestion
+    (write) and retrieval (read) both need to go through the same client
+    instance within a process, so every caller should get the same
+    cached instance for a given path."""
+    # Normalize before using as a cache key -- "chroma_store" (relative,
+    # cwd-dependent) and an absolute path to the same directory are
+    # different strings but must resolve to the same cached client, or
+    # this cache does nothing for callers that don't happen to pass the
+    # exact same string. normcase() matters on Windows specifically:
+    # abspath() alone doesn't fix drive-letter case (cwd-relative paths
+    # can resolve with an uppercase "C:\" while a hardcoded path uses
+    # lowercase "c:\"), which silently defeated this cache and
+    # reproduced the exact bug it's meant to prevent.
+    key = os.path.normcase(os.path.abspath(persist_dir))
+    if key not in _persistent_clients:
+        _persistent_clients[key] = chromadb.PersistentClient(path=key)
+    return _persistent_clients[key]
 
 
 def get_ephemeral_client():

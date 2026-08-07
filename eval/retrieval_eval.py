@@ -28,6 +28,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from backend import vectorstore as vs
+from backend.clause_types import CLAUSE_TYPES
 
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
@@ -36,31 +37,12 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 # you're debugging/tuning, then set back to None for your reported result.
 MAX_UNIQUE_CONTRACTS = None
 
-# slug (matches data/<slug>.json) -> description used as the retrieval query
+# slug (matches data/<slug>.json) -> description used as the retrieval
+# query. Built from backend/clause_types.py -- the single source of
+# truth for the 7 clause types -- rather than a separate hardcoded copy.
 CLAUSE_QUERIES = {
-    "renewal_term":
-        "Renewal Term clause: does this agreement automatically renew, "
-        "what is the renewal period, and what notice is required to "
-        "terminate the renewal?",
-    "termination_for_convenience":
-        "Termination For Convenience clause: can either party terminate "
-        "this agreement without cause, and what conditions or notice "
-        "period apply?",
-    "cap_on_liability":
-        "Cap On Liability clause: what is the maximum liability cap for "
-        "either party under this agreement?",
-    "uncapped_liability":
-        "Uncapped Liability clause: are there exceptions where a party's "
-        "liability is not subject to any cap?",
-    "minimum_commitment":
-        "Minimum Commitment clause: is there a minimum purchase, spend, "
-        "or volume commitment required under this agreement?",
-    "audit_rights":
-        "Audit Rights clause: does either party have the right to audit "
-        "the other party's records or compliance?",
-    "governing_law":
-        "Governing Law clause: which state or country's law governs the "
-        "interpretation of this agreement?",
+    c["slug"]: f'{c["display_name"]} clause: {c["description"]}'
+    for c in CLAUSE_TYPES
 }
 
 K_VALUES = (1, 3, 5)
