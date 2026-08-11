@@ -109,3 +109,71 @@ def query(collection, query_text, doc_id=None, n_results=5):
         n_results=n_results,
         where=where,
     )
+
+
+# ---------- Rerank ----------
+
+_reranker = None
+
+
+def get_reranker():
+    """Lazy-loaded, cached cross-encoder. Runs locally (no API calls, no
+    quota cost -- deliberately not another Gemini call, since the
+    free-tier daily quota already caused real problems this week).
+
+    Why this on top of query() at all: the embedding function above is a
+    bi-encoder -- it embeds the query and each chunk SEPARATELY and
+    compares vectors, which is fast but coarse. It's what makes
+    governing_law/minimum_commitment retrieval weak (measured via
+    eval/retrieval_eval.py: recall@3 of 0.44-0.59, versus 0.7-1.0 for the
+    other 5 clause types) -- short boilerplate clauses embed close to
+    OTHER boilerplate (severability, notices, waiver) in vector space,
+    and a bi-encoder can't tell them apart finely. A cross-encoder reads
+    the query and each candidate TOGETHER, with full attention between
+    them, which resolves exactly that kind of fine-grained distinction --
+    at the cost of being too slow to run over an entire collection, which
+    is why it reranks a small candidate pool rather than replacing the
+    initial vector search."""
+    global _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return _reranker
+
+
+def query_with_rerank(collection, query_text, doc_id=None, candidate_pool=15, n_results=5):
+    """Two-stage retrieval: query() casts a wide net (candidate_pool
+    results, optimized for recall -- don't miss the right chunk), then a
+    cross-encoder reranks those candidates against query_text and keeps
+    the top n_results (optimized for precision -- of the chunks that
+    might be relevant, which actually are).
+
+    Returns a plain list of {text, start, end, distance, rerank_score},
+    ranked by rerank_score descending (higher = more relevant). distance
+    is kept for reference but is the PRE-rerank vector distance -- after
+    reranking, rerank_score is the meaningful ranking signal, not
+    distance."""
+    raw = query(collection, query_text, doc_id=doc_id, n_results=candidate_pool)
+    documents = raw["documents"][0]
+    metadatas = raw["metadatas"][0]
+    distances = raw["distances"][0]
+
+    if not documents:
+        return []
+
+    reranker = get_reranker()
+    pairs = [[query_text, doc] for doc in documents]
+    scores = reranker.predict(pairs)
+
+    candidates = [
+        {
+            "text": doc,
+            "start": meta["start"],
+            "end": meta["end"],
+            "distance": dist,
+            "rerank_score": float(score),
+        }
+        for doc, meta, dist, score in zip(documents, metadatas, distances, scores)
+    ]
+    candidates.sort(key=lambda c: c["rerank_score"], reverse=True)
+    return candidates[:n_results]

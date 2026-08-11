@@ -37,6 +37,12 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 # you're debugging/tuning, then set back to None for your reported result.
 MAX_UNIQUE_CONTRACTS = None
 
+# Two-stage retrieval (query_with_rerank: wide vector search + cross-
+# encoder rerank) vs plain vector search alone. Toggle to get a direct
+# before/after comparison on the same sample.
+USE_RERANK = True
+RERANK_CANDIDATE_POOL = 15
+
 # slug (matches data/<slug>.json) -> description used as the retrieval
 # query. Built from backend/clause_types.py -- the single source of
 # truth for the 7 clause types -- rather than a separate hardcoded copy.
@@ -119,14 +125,21 @@ def evaluate_clause_type(slug, examples, query, collection, contract_chunks,
             skipped += 1
             continue
 
-        results = vs.query(collection, query, doc_id=ex["contract"],
-                            n_results=max(k_values))
-        retrieved_metas = results["metadatas"][0]
+        if USE_RERANK:
+            reranked = vs.query_with_rerank(
+                collection, query, doc_id=ex["contract"],
+                candidate_pool=RERANK_CANDIDATE_POOL, n_results=max(k_values),
+            )
+            retrieved_starts_ends = [(c["start"], c["end"]) for c in reranked]
+        else:
+            results = vs.query(collection, query, doc_id=ex["contract"],
+                                n_results=max(k_values))
+            retrieved_starts_ends = [(m["start"], m["end"]) for m in results["metadatas"][0]]
 
         retrieved_indices = []
-        for meta in retrieved_metas:
+        for start, end in retrieved_starts_ends:
             for i, c in enumerate(chunks):
-                if c["start"] == meta["start"] and c["end"] == meta["end"]:
+                if c["start"] == start and c["end"] == end:
                     retrieved_indices.append(i)
                     break
 
@@ -142,6 +155,7 @@ def evaluate_clause_type(slug, examples, query, collection, contract_chunks,
 
 
 def main():
+    print(f"USE_RERANK = {USE_RERANK}" + (f" (candidate_pool={RERANK_CANDIDATE_POOL})" if USE_RERANK else ""))
     print("Loading clause-type data...")
     all_data = load_all_examples()
     if not all_data:

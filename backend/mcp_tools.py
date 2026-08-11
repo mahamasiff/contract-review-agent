@@ -40,10 +40,14 @@ def get_playbook_policy(clause_type: str):
     return policy
 
 
-def retrieve_clause(contract_id: str, clause_type: str, n_results: int = 3):
+def retrieve_clause(contract_id: str, clause_type: str, n_results: int = 5):
     """Semantic search for the chunk(s) of `contract_id`'s text most
-    relevant to `clause_type`. Returns a ranked list of
-    {text, start, end, distance} -- distance is lower = more similar.
+    relevant to `clause_type`. Two-stage: query() casts a wide net
+    (candidate_pool candidates from vector search), then a cross-encoder
+    reranks them and keeps the top n_results. Returns a ranked list of
+    {text, start, end, distance, rerank_score} -- rerank_score is the
+    meaningful ranking signal (higher = more relevant); distance is the
+    pre-rerank vector distance, kept for reference only.
 
     Raises if contract_id hasn't been ingested (no chunks under that
     doc_id exist), so the agent doesn't mistake "not ingested" for
@@ -64,16 +68,7 @@ def retrieve_clause(contract_id: str, clause_type: str, n_results: int = 3):
         )
 
     query_text = next(c["description"] for c in CLAUSE_TYPES if c["slug"] == clause_type)
-    results = vs.query(collection, query_text, doc_id=contract_id, n_results=n_results)
-
-    chunks = []
-    for text, meta, distance in zip(
-        results["documents"][0], results["metadatas"][0], results["distances"][0]
-    ):
-        chunks.append({
-            "text": text,
-            "start": meta["start"],
-            "end": meta["end"],
-            "distance": distance,
-        })
-    return chunks
+    return vs.query_with_rerank(
+        collection, query_text, doc_id=contract_id,
+        candidate_pool=15, n_results=n_results,
+    )
